@@ -84,23 +84,22 @@ class GameScene extends Phaser.Scene {
     this.offGround     = 10;
     this.timeSinceJump = 0;
     this.jumps         = 0;
-    this.jKeyLetGo     = 455;
+    this.airJumpUsed   = false;  // one air jump per flight when D powerup active
+    this.spawnAccum    = 0;
     this.pwrCounter    = 0;
     this.scoreCoins    = 0;
     this.score         = 0;
-    this.fpb           = 120;   // framesPerBlock
+    this.fpb           = 120;   // framesPerBlock (in virtual 60fps frames)
     this.isDead        = false;
 
     this.Ground = { x: -100, y: 300, w: 1000, h: 900 };
 
     this.player = {
-      x: 385, y: 270, w: 30, h: 30,
-      yVel: 0, xVel: 0, hMov: 1.15,
+      xVel: 0, hMov: 1.15,
       shieldTimer: 0,
       hTimer:      -999990,
       vTimer:      -99990,
       dTimer:      -99990,
-      originalPos: 385,
     };
 
     this.blocks   = [];
@@ -116,14 +115,26 @@ class GameScene extends Phaser.Scene {
       this.classes[0].push(-100 + i * 20);
     }
 
-    // ── World container (camera simulation) ──────────────────
-    // worldContainer.x/y mirrors p5's translate(tX, camY) each frame.
-    this.worldContainer = this.add.container(0, 0);
+    // ── World graphics (camera scrolls automatically) ────────
     this.worldGfx = this.add.graphics();
-    this.worldContainer.add(this.worldGfx);
 
-    // ── HUD (screen-space, not in worldContainer) ────────────
-    this.hudGfx = this.add.graphics();
+    // ── Player physics proxy (invisible, origin 0,0 = top-left) ──
+    this.playerProxy = this.add.rectangle(385, 270, 30, 30).setOrigin(0, 0).setAlpha(0);
+    this.physics.add.existing(this.playerProxy);
+    this.playerProxy.body.setAllowGravity(true);
+    this.playerProxy.body.setGravityY(1080);
+
+    // ── Static ground proxy + collider ───────────────────────
+    this.groundProxy = this.add.rectangle(-100, 300, 1000, 900).setOrigin(0, 0).setAlpha(0);
+    this.physics.add.existing(this.groundProxy, true);
+    this.physics.add.collider(this.playerProxy, this.groundProxy, () => {
+      this.offGround = 0;
+      this.jumps = 0;
+      this.airJumpUsed = false;
+    });
+
+    // ── HUD (screen-space, not scrolled by camera) ───────────
+    this.hudGfx = this.add.graphics().setScrollFactor(0);
 
     // Persistent text labels for HUD powerup indicators (H, D, V only).
     // Shield indicator is just a circle — no text needed.
@@ -134,21 +145,21 @@ class GameScene extends Phaser.Scene {
 
     this.hudHTxt = this.add.text(iX(1.2), iCY, '<->', {
       fontFamily: 'Arial', fontSize: '10px', color: '#000000',
-    }).setOrigin(0.5, 0.5).setVisible(false);
+    }).setOrigin(0.5, 0.5).setVisible(false).setScrollFactor(0);
 
     this.hudDTxt = this.add.text(iX(2.2), iCY, '↑↑', {
       fontFamily: 'Arial', fontSize: '10px', color: '#000000',
-    }).setOrigin(0.5, 0.5).setVisible(false);
+    }).setOrigin(0.5, 0.5).setVisible(false).setScrollFactor(0);
 
     this.hudVTxt = this.add.text(iX(3.2), iCY, '↕', {
       fontFamily: 'Arial', fontSize: '20px', color: '#000000',
-    }).setOrigin(0.5, 0.5).setVisible(false);
+    }).setOrigin(0.5, 0.5).setVisible(false).setScrollFactor(0);
 
     // Score / FPB / FPS text (right-aligned, matching original)
     const txtStyle = { fontFamily: 'Arial', fontSize: '25px', color: '#000000' };
-    this.scoreTxt = this.add.text(790, 13, '', txtStyle).setOrigin(1, 0.5);
-    this.fpbTxt   = this.add.text(790, 40, '', txtStyle).setOrigin(1, 0.5);
-    this.fpsTxt   = this.add.text(790, 67, '', txtStyle).setOrigin(1, 0.5);
+    this.scoreTxt = this.add.text(790, 13, '', txtStyle).setOrigin(1, 0.5).setScrollFactor(0);
+    this.fpbTxt   = this.add.text(790, 40, '', txtStyle).setOrigin(1, 0.5).setScrollFactor(0);
+    this.fpsTxt   = this.add.text(790, 67, '', txtStyle).setOrigin(1, 0.5).setScrollFactor(0);
 
     // ── Input ────────────────────────────────────────────────
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -178,27 +189,23 @@ class GameScene extends Phaser.Scene {
     };
 
     // Create a world-space text label for types that have one.
-    // Added to worldContainer so it scrolls with the camera.
+    // Added directly to scene (not a container) — camera scrolls it automatically.
     if (type === 'H') {
       p.labelText = this.add.text(x + 10, y + 10, '<->', {
         fontFamily: 'Arial', fontSize: '10px', color: '#000000',
       }).setOrigin(0.5, 0.5);
-      this.worldContainer.add(p.labelText);
     } else if (type === 'D') {
       p.labelText = this.add.text(x + 10, y + 10, '↑↑', {
         fontFamily: 'Arial', fontSize: '10px', color: '#000000',
       }).setOrigin(0.5, 0.5);
-      this.worldContainer.add(p.labelText);
     } else if (type === 'V') {
       p.labelText = this.add.text(x + 10, y + 10, '↕', {
         fontFamily: 'Arial', fontSize: '20px', color: '#000000',
       }).setOrigin(0.5, 0.5);
-      this.worldContainer.add(p.labelText);
     } else if (type === 'S') {
       p.labelText = this.add.text(x + 10, y + 10, '+200', {
         fontFamily: 'Arial', fontSize: '6.7px', color: '#000000',
       }).setOrigin(0.5, 0.5);
-      this.worldContainer.add(p.labelText);
     }
 
     this.powerups.push(p);
@@ -207,7 +214,7 @@ class GameScene extends Phaser.Scene {
   removePowerup(index) {
     const p = this.powerups[index];
     if (p.labelText) {
-      this.worldContainer.remove(p.labelText, true);
+      p.labelText.destroy();
     }
     this.powerups.splice(index, 1);
   }
@@ -218,7 +225,7 @@ class GameScene extends Phaser.Scene {
     if (b.y + this.camY < -b.h) {
       // Block is above viewport: draw a red 5px indicator bar at the top.
       // In world-space the bar is at y = -camY, which renders at screen y = 0
-      // because worldContainer.y = camY.
+      // because camera.scrollY = -camY.
       gfx.fillStyle(0xff0000, 1);
       gfx.fillRect(Math.round(b.x), -this.camY, b.w, 5);
     } else {
@@ -249,75 +256,78 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  drawPlayer(gfx) {
+  drawPlayer(gfx, px, py, yVel, xVel) {
     const p = this.player;
+    const w = 30, h = 30;
 
     // Red body with slightly rounded corners (radius = w/10 = 3)
     gfx.fillStyle(0xff0000, 1);
-    gfx.fillRoundedRect(p.x, p.y, p.w, p.h, p.w / 10);
+    gfx.fillRoundedRect(px, py, w, h, w / 10);
 
     // Face: 2 eyes + 1 mouth, positions shift based on velocity state
     gfx.fillStyle(0x000000, 1);
 
-    if (p.yVel > 0.5) {
+    if (yVel > 0.5) {
       // Jumping
-      if (p.xVel > 0.8) {
-        gfx.fillRect(p.x + p.w * 0.30, p.y + p.h * 0.22, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.75, p.y + p.h * 0.22, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.40, p.y + p.h * 0.54, p.w * 0.40, p.h * 0.25);
-      } else if (p.xVel < -0.8) {
-        gfx.fillRect(p.x + p.w * 0.10, p.y + p.h * 0.22, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.55, p.y + p.h * 0.22, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.20, p.y + p.h * 0.54, p.w * 0.40, p.h * 0.25);
+      if (xVel > 0.8) {
+        gfx.fillRect(px + w * 0.30, py + h * 0.22, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.75, py + h * 0.22, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.40, py + h * 0.54, w * 0.40, h * 0.25);
+      } else if (xVel < -0.8) {
+        gfx.fillRect(px + w * 0.10, py + h * 0.22, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.55, py + h * 0.22, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.20, py + h * 0.54, w * 0.40, h * 0.25);
       } else {
-        gfx.fillRect(p.x + p.w * 0.20, p.y + p.h * 0.22, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.65, p.y + p.h * 0.22, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.30, p.y + p.h * 0.54, p.w * 0.40, p.h * 0.25);
+        gfx.fillRect(px + w * 0.20, py + h * 0.22, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.65, py + h * 0.22, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.30, py + h * 0.54, w * 0.40, h * 0.25);
       }
-    } else if (p.yVel < -3.3) {
+    } else if (yVel < -3.3) {
       // Falling
-      if (p.xVel > 0.8) {
-        gfx.fillRect(p.x + p.w * 0.30, p.y + p.h * 0.43, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.75, p.y + p.h * 0.43, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.40, p.y + p.h * 0.73, p.w * 0.40, p.h * 0.25);
-      } else if (p.xVel < -0.8) {
-        gfx.fillRect(p.x + p.w * 0.10, p.y + p.h * 0.43, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.55, p.y + p.h * 0.43, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.20, p.y + p.h * 0.73, p.w * 0.40, p.h * 0.25);
+      if (xVel > 0.8) {
+        gfx.fillRect(px + w * 0.30, py + h * 0.43, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.75, py + h * 0.43, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.40, py + h * 0.73, w * 0.40, h * 0.25);
+      } else if (xVel < -0.8) {
+        gfx.fillRect(px + w * 0.10, py + h * 0.43, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.55, py + h * 0.43, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.20, py + h * 0.73, w * 0.40, h * 0.25);
       } else {
-        gfx.fillRect(p.x + p.w * 0.20, p.y + p.h * 0.43, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.65, p.y + p.h * 0.43, p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.30, p.y + p.h * 0.73, p.w * 0.40, p.h * 0.25);
+        gfx.fillRect(px + w * 0.20, py + h * 0.43, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.65, py + h * 0.43, w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.30, py + h * 0.73, w * 0.40, h * 0.25);
       }
     } else {
       // Ground / neutral
-      if (p.xVel > 0.8) {
-        gfx.fillRect(p.x + p.w * 0.30, p.y + p.h / 3,   p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.75, p.y + p.h / 3,   p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.40, p.y + p.h * 2/3, p.w * 0.40, p.h * 0.25);
-      } else if (p.xVel < -0.8) {
-        gfx.fillRect(p.x + p.w * 0.10, p.y + p.h / 3,   p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.55, p.y + p.h / 3,   p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.20, p.y + p.h * 2/3, p.w * 0.40, p.h * 0.25);
+      if (xVel > 0.8) {
+        gfx.fillRect(px + w * 0.30, py + h / 3,   w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.75, py + h / 3,   w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.40, py + h * 2/3, w * 0.40, h * 0.25);
+      } else if (xVel < -0.8) {
+        gfx.fillRect(px + w * 0.10, py + h / 3,   w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.55, py + h / 3,   w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.20, py + h * 2/3, w * 0.40, h * 0.25);
       } else {
-        gfx.fillRect(p.x + p.w * 0.20, p.y + p.h / 3,   p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.65, p.y + p.h / 3,   p.w * 0.15, p.h * 0.15);
-        gfx.fillRect(p.x + p.w * 0.30, p.y + p.h * 2/3, p.w * 0.40, p.h * 0.25);
+        gfx.fillRect(px + w * 0.20, py + h / 3,   w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.65, py + h / 3,   w * 0.15, h * 0.15);
+        gfx.fillRect(px + w * 0.30, py + h * 2/3, w * 0.40, h * 0.25);
       }
     }
 
     // Shield aura (green circle outline, radius = diagonal/2 of player)
     if (p.shieldTimer > 0) {
-      gfx.lineStyle(p.w / 15, rgb(27, 209, 130), 1);
-      gfx.strokeCircle(p.x + p.w / 2, p.y + p.h / 2, (p.w * 1.414) / 2);
+      gfx.lineStyle(w / 15, rgb(27, 209, 130), 1);
+      gfx.strokeCircle(px + w / 2, py + h / 2, (w * 1.414) / 2);
     }
   }
 
   // ── Main update loop ──────────────────────────────────────
 
-  update() {
+  update(time, delta) {
     if (this.isDead) return;
 
+    // dt = 1.0 at 60fps, 0.5 at 120fps — all physics scaled by this
+    const dt  = delta / (1000 / 60);
     const p   = this.player;
     const blk = this.blocks;
     const gfx = this.worldGfx;
@@ -329,31 +339,31 @@ class GameScene extends Phaser.Scene {
     // 2. Horizontal move speed (boosted by hSpeed powerup)
     p.hMov = p.hTimer > 0 ? 1.8 : 1.15;
 
-    // 3. jKeyLetGo tracking + jump
-    //    jKeyLetGo increments while key is held; resets to 0 when released.
-    //    This means jKeyLetGo === 1 on the exact first frame of each new key press —
-    //    used to detect a re-press for double jump.
-    this.jKeyLetGo++;
-    const jumpDown = this.cursors.up.isDown || this.wasd.up.isDown;
-    if (jumpDown) {
-      const normalJump = this.offGround < 3 && this.timeSinceJump > 2;
-      const doubleJump = p.dTimer > 0 && this.jumps < 2 && this.jKeyLetGo === 1;
-      if (normalJump || doubleJump) {
-        p.yVel = p.vTimer > 0 ? 9 : 8;
-        this.timeSinceJump = 0;
-        this.jumps++;
-      }
-    } else {
-      this.jKeyLetGo = 0;
+    // 3. Jump detection
+    const jumpDown     = this.cursors.up.isDown || this.wasd.up.isDown;
+    const jumpJustDown = Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+                         Phaser.Input.Keyboard.JustDown(this.wasd.up);
+
+    const normalJump = this.offGround < 3 && this.timeSinceJump > 2;
+    const inAir = this.offGround >= 3;
+    const airJumpOk = p.dTimer > 0 && inAir && !this.airJumpUsed && jumpJustDown;
+    if (jumpDown && (normalJump || airJumpOk)) {
+      // Nudge up so we're no longer in contact with ground; otherwise Arcade Physics
+      // (which runs before/after this update) can zero our velocity when resolving the collision.
+      this.playerProxy.body.y -= 2;
+      this.playerProxy.body.setVelocityY(p.vTimer > 0 ? -540 : -480);
+      this.timeSinceJump = 0;
+      this.jumps++;
+      if (airJumpOk) this.airJumpUsed = true;
     }
 
-    // 4. Horizontal input (xVel += ±hMov each frame key is held)
-    if (this.cursors.left.isDown  || this.wasd.left.isDown)  p.xVel += -p.hMov;
-    if (this.cursors.right.isDown || this.wasd.right.isDown) p.xVel +=  p.hMov;
+    // 4. Horizontal input (xVel += ±hMov * dt each frame key is held)
+    if (this.cursors.left.isDown  || this.wasd.left.isDown)  p.xVel += -p.hMov * dt;
+    if (this.cursors.right.isDown || this.wasd.right.isDown) p.xVel +=  p.hMov * dt;
 
-    // 5. Down key: fast-fall (only with vSpeed powerup)
+    // 5. Down key: fast-fall boost (only with vSpeed powerup)
     if ((this.cursors.down.isDown || this.wasd.down.isDown) && p.vTimer > 0) {
-      p.yVel -= 0.6;
+      this.playerProxy.body.setVelocityY(this.playerProxy.body.velocity.y + 36 * dt);
     }
 
     // 6. Clear world graphics for this frame
@@ -364,7 +374,9 @@ class GameScene extends Phaser.Scene {
     gfx.fillRect(this.Ground.x, this.Ground.y, this.Ground.w, this.Ground.h);
 
     // 8. Spawn block (and maybe a powerup) on schedule
-    if (this.elapsed % this.fpb === 0) {
+    this.spawnAccum += dt;
+    if (this.spawnAccum >= this.fpb) {
+      this.spawnAccum -= this.fpb;
       this.spawnBlock();
       const pw = this.pwrCounter % 35;
       if      (pw === 6)  this.spawnPowerup('I');
@@ -383,8 +395,8 @@ class GameScene extends Phaser.Scene {
       const b = blk[i];
 
       if (!b.fixed) {
-        b.yVel += GRAVITY;
-        b.y    += b.yVel;
+        b.yVel += GRAVITY * dt;
+        b.y    += b.yVel * dt;
 
         const c = Math.ceil((300 - b.y) / b.h) - 1;
 
@@ -414,23 +426,28 @@ class GameScene extends Phaser.Scene {
       // Draw this block if it is within the visible viewport
       if (b.y < -this.camY + 500 &&
           !(b.fixed && b.y < -this.camY - b.h) &&
-          Math.abs(b.x + b.w / 2 - p.x - p.w / 2) < 800) {
+          Math.abs(b.x + b.w / 2 - this.playerProxy.x - 15) < 800) {
         this.drawBlock(gfx, b);
       }
     }
 
     // 10. Pre-updateX block-player collision (last 300 blocks)
+    // Use body position so we don't fight with game object sync timing (avoids jitter on blocks).
     const colStart = Math.max(0, blk.length - 300);
+    const bodyX = () => this.playerProxy.body.x;
+    const bodyY = () => this.playerProxy.body.y;
     for (let i = colStart; i < blk.length; i++) {
-      const b = blk[i];
-      if (!rectrect(p, b)) continue;
+      const b  = blk[i];
+      const pr = { x: bodyX(), y: bodyY(), w: 30, h: 30 };
+      if (!rectrect(pr, b)) continue;
 
-      if (p.y < b.y) {
+      if (bodyY() < b.y) {
         // Player landed on top of block
-        p.y            = b.y - p.h;
-        p.yVel         = 0;
+        this.playerProxy.body.reset(bodyX(), b.y - 30 - 0.1);
+        this.playerProxy.body.setVelocityY(0);
         this.offGround = 0;
         this.jumps     = 0;
+        this.airJumpUsed = false;
       } else if (b.yVel > 3) {
         // Fast-falling block: absorb with shield or die
         if (p.shieldTimer > 0) {
@@ -442,57 +459,60 @@ class GameScene extends Phaser.Scene {
         return;
       } else {
         // Ceiling / side push
-        p.yVel = 0;
-        while (rectrect(p, b)) p.y += 0.2;
+        this.playerProxy.body.setVelocityY(0);
+        let ny = bodyY();
+        const px = bodyX();
+        while (rectrect({ x: px, y: ny, w: 30, h: 30 }, b)) ny += 0.2;
+        this.playerProxy.body.reset(px, ny);
       }
     }
 
-    // 11. Decrement all powerup timers
-    p.shieldTimer--;
-    p.hTimer--;
-    p.vTimer--;
-    p.dTimer--;
+    // 11. Decrement all powerup timers (dt-scaled)
+    p.shieldTimer -= dt;
+    p.hTimer      -= dt;
+    p.vTimer      -= dt;
+    p.dTimer      -= dt;
 
-    // 12. updateX: apply damping, move, clamp to world bounds
-    p.originalPos = p.x;
-    p.xVel *= 0.8;
-    p.x    += p.xVel;
-    p.x     = constrain(p.x, -100, 900 - p.w);
+    // 12. updateX: exponential damping, move, clamp to world bounds
+    const originalX = bodyX();
+    p.xVel *= Math.pow(0.8, dt);
+    const newX = constrain(bodyX() + p.xVel * dt, -100, 870);
+    const savedVY = this.playerProxy.body.velocity.y;
+    // Use body.y so a same-frame jump nudge (body.y -= 2) isn't overwritten by game object y
+    this.playerProxy.body.reset(newX, this.playerProxy.body.y);
+    this.playerProxy.body.setVelocityY(savedVY);
 
     // 13. Post-updateX block collision: wall check
     for (let i = colStart; i < blk.length; i++) {
-      if (rectrect(p, blk[i])) {
+      const pr = { x: bodyX(), y: bodyY(), w: 30, h: 30 };
+      if (rectrect(pr, blk[i])) {
         p.xVel = 0;
-        p.x    = p.originalPos;
+        const vy2 = this.playerProxy.body.velocity.y;
+        this.playerProxy.body.reset(originalX, bodyY());
+        this.playerProxy.body.setVelocityY(vy2);
       }
     }
 
-    // 14. updateY: gravity (stronger if falling and not holding jump)
-    p.originalPos = p.y;
-    if (p.yVel < 4 || jumpDown) {
-      p.yVel -= GRAVITY;
-    } else {
-      p.yVel -= GRAVITY * 2;
-    }
-    p.y -= p.yVel;   // positive yVel = upward (p5 convention preserved)
+    // 14. Dynamic Y gravity: heavier when moving strongly upward without holding jump
+    //     (short-hop mechanic — equivalent to original heavy gravity when yVel >= 4 && !jumpDown)
+    //     velocity.y <= -240 px/s ≡ original yVel >= 4 px/frame at 60fps
+    const heavyGrav = this.playerProxy.body.velocity.y <= -240 && !jumpDown;
+    this.playerProxy.body.setGravityY(heavyGrav ? 2160 : 1080);
 
-    // 15. Ground collision
-    if (rectrect(p, this.Ground)) {
-      p.y            = this.Ground.y - p.h;
-      p.yVel         = 0;
-      this.offGround = 0;
-    }
+    // 15. Ground collision: handled by arcade physics + collider callback (no manual check)
 
     // 16. Post-updateY block-player collision (last 300 blocks)
     for (let i = colStart; i < blk.length; i++) {
-      const b = blk[i];
-      if (!rectrect(p, b)) continue;
+      const b  = blk[i];
+      const pr = { x: bodyX(), y: bodyY(), w: 30, h: 30 };
+      if (!rectrect(pr, b)) continue;
 
-      if (p.y < b.y) {
-        p.y            = b.y - p.h - 0.1;
-        p.yVel         = 0;
+      if (bodyY() < b.y) {
+        this.playerProxy.body.reset(bodyX(), b.y - 30 - 0.1);
+        this.playerProxy.body.setVelocityY(0);
         this.offGround = 0;
         this.jumps     = 0;
+        this.airJumpUsed = false;
       } else if (b.yVel > 3) {
         if (p.shieldTimer > 0) {
           blk.splice(i, 1);
@@ -502,20 +522,24 @@ class GameScene extends Phaser.Scene {
         this.triggerDeath();
         return;
       } else {
-        p.yVel = 0;
-        while (rectrect(p, b)) p.y += 0.2;
+        this.playerProxy.body.setVelocityY(0);
+        let ny = bodyY();
+        const px2 = bodyX();
+        while (rectrect({ x: px2, y: ny, w: 30, h: 30 }, b)) ny += 0.2;
+        this.playerProxy.body.reset(px2, ny);
       }
     }
 
-    // 17. Draw player
-    this.drawPlayer(gfx);
+    // 17. Draw player (read position from proxy; derive yVel in original units)
+    const renderYVel = -this.playerProxy.body.velocity.y / 60;
+    this.drawPlayer(gfx, this.playerProxy.x, this.playerProxy.y, renderYVel, p.xVel);
 
     // 18. Powerups: physics, flash, collection, expiry
     for (let i = 0; i < this.powerups.length; i++) {
       const pw = this.powerups[i];
 
-      pw.yVel += GRAVITY;
-      pw.y    += pw.yVel;
+      pw.yVel += GRAVITY * dt;
+      pw.y    += pw.yVel * dt;
 
       // Ground landing
       if (rectrect(pw, this.Ground)) {
@@ -530,7 +554,7 @@ class GameScene extends Phaser.Scene {
         }
       }
 
-      // Flash logic: always visible for first 240 frames, then blinks
+      // Flash logic: always visible for first 240 virtual frames, then blinks
       const visible = pw.timer < 240 || this.elapsed % 16 < 8;
       if (visible) this.drawPowerupShape(gfx, pw);
       if (pw.labelText) {
@@ -539,7 +563,8 @@ class GameScene extends Phaser.Scene {
       }
 
       // Player collects powerup
-      if (rectrect(pw, p)) {
+      const playerRect = { x: this.playerProxy.x, y: this.playerProxy.y, w: 30, h: 30 };
+      if (rectrect(pw, playerRect)) {
         switch (pw.type) {
           case 'I': p.shieldTimer = constrain(p.shieldTimer, 0, 99999) + 600;  break;
           case 'H': p.hTimer      = constrain(p.hTimer,      0, 99999) + 600;  break;
@@ -552,34 +577,33 @@ class GameScene extends Phaser.Scene {
         continue;
       }
 
-      pw.timer++;
+      pw.timer += dt;
       if (pw.timer > 300) {  // 5-second lifetime at 60fps
         this.removePowerup(i);
         i--;
       }
     }
 
-    // 19. Counters
-    this.offGround++;
-    this.timeSinceJump++;
-    this.elapsed++;
+    // 19. Counters (dt-scaled for framerate independence)
+    this.offGround     += dt;
+    this.timeSinceJump += dt;
+    this.elapsed       += dt;
 
     // 20. Camera scroll (automatic upward drift + player-lead)
-    this.camY += 2 / this.fpb;
-    if (p.y + this.camY < 150 && -p.y + 150 > this.camY) {
-      this.camY = -p.y + 150;
+    this.camY += (2 / this.fpb) * dt;
+    if (this.playerProxy.y + this.camY < 150 && -this.playerProxy.y + 150 > this.camY) {
+      this.camY = -this.playerProxy.y + 150;
     }
 
-    // 21. Apply camera transform to world container
-    const tX = -constrain(p.x - 400, -100, 100);
-    this.worldContainer.x = tX;
-    this.worldContainer.y = this.camY;
+    // 21. Apply camera transform via Phaser camera scroll
+    const tX = -constrain(this.playerProxy.x - 400, -100, 100);
+    this.cameras.main.setScroll(-tX, -this.camY);
 
     // 22. Score
     this.score = Math.round(this.camY) + blk.length + this.scoreCoins;
 
     // 23. Death: fell off the bottom
-    if (p.y > -this.camY + 500) {
+    if (this.playerProxy.y > -this.camY + 500) {
       this.triggerDeath();
       return;
     }
@@ -645,7 +669,7 @@ class GameScene extends Phaser.Scene {
     // Clean up all world-space powerup labels before leaving scene
     for (const pw of this.powerups) {
       if (pw.labelText) {
-        this.worldContainer.remove(pw.labelText, true);
+        pw.labelText.destroy();
       }
     }
 
@@ -718,10 +742,15 @@ class GameOverScene extends Phaser.Scene {
 
 const config = {
   type: Phaser.AUTO,
+  parent: 'game-container',
+  physics: {
+    default: 'arcade',
+    arcade: { gravity: { y: 0 }, debug: false },
+  },
   scale: {
-    mode:       Phaser.Scale.FIT,
+    mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width:  800,
+    width: 800,
     height: 500,
   },
   scene: [MenuScene, GameScene, GameOverScene],
