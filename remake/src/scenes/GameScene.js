@@ -40,6 +40,7 @@ import {
   POWERUP_PICKUP_TEXT,
 } from '../powerups.js';
 import { ParticleFx, drawSkyGradient, makeClouds, drawClouds } from '../fx.js';
+import { sfx } from '../audio.js';
 
 // Dev stress test: ?stress forces a block every 2 sim steps
 const STRESS =
@@ -83,8 +84,38 @@ export class GameScene extends Phaser.Scene {
     // --- render-only state ---
     this.fx = new ParticleFx();
     this.clouds = makeClouds(5);
-    this.blocksMgr.onFix = (b) =>
+    this.blocksMgr.onFix = (b) => {
       this.fx.dust(b.x + b.w / 2, b.y + b.h, 7, 0xcbb391);
+      // only audible when the landing is on screen
+      const p = this.player;
+      if (
+        b.y > -this.camY - b.h &&
+        b.y < -this.camY + 500 &&
+        Math.abs(b.x + b.w / 2 - (p.x + p.w / 2)) < 800
+      ) {
+        sfx.blockLand();
+      }
+    };
+
+    this.input.keyboard.on('keydown-M', () => {
+      const muted = sfx.toggleMute();
+      if (this.muteToast) this.muteToast.destroy();
+      this.muteToast = this.add
+        .text(400, 60, muted ? 'Sound off' : 'Sound on', textStyle(18, {
+          color: '#ffffff',
+          fontStyle: 'bold',
+          stroke: '#2b5876',
+          strokeThickness: 4,
+        }))
+        .setOrigin(0.5);
+      this.tweens.add({
+        targets: this.muteToast,
+        alpha: 0,
+        delay: 600,
+        duration: 400,
+        onComplete: () => this.muteToast && this.muteToast.destroy(),
+      });
+    });
 
     // --- backdrop (screen space, behind the world) ---
     const sky = this.add.graphics();
@@ -140,6 +171,7 @@ export class GameScene extends Phaser.Scene {
     if (steps === MAX_STEPS_PER_FRAME) this.accumulator = 0;
 
     if (this.dead) {
+      sfx.death();
       this.scene.start('GameOver', {
         score: this.score,
         camY: this.camY,
@@ -166,8 +198,10 @@ export class GameScene extends Phaser.Scene {
 
     // input (jKeyLetGo === 1 marks a fresh jump-key press, for double jumps)
     this.jKeyLetGo++;
+    const preJumpTSJ = p.timeSinceJump;
     if (this.inp.up) {
       p.jump(this.jKeyLetGo);
+      if (p.timeSinceJump === 0 && preJumpTSJ !== 0) sfx.jump();
     } else {
       this.jKeyLetGo = 0;
     }
@@ -226,6 +260,7 @@ export class GameScene extends Phaser.Scene {
     if (p.offGround === 0 && wasAirborne > 4) {
       p.landSquash = 8;
       this.fx.dust(p.x + p.w / 2, p.y + p.h, 6);
+      sfx.land();
     }
 
     this.updatePowerups();
@@ -259,6 +294,7 @@ export class GameScene extends Phaser.Scene {
         } else if (b.yVel > SQUISH_VEL) {
           if (p.shieldTimer > 0) {
             this.fx.burst(b.x + b.w / 2, b.y + b.h / 2, POWERUP_COLORS.I, 12);
+            sfx.shieldPop();
             this.blocksMgr.remove(b);
             i--;
             continue;
@@ -325,6 +361,8 @@ export class GameScene extends Phaser.Scene {
         // pickup feedback (render-only)
         this.fx.burst(pw.x + pw.w / 2, pw.y + pw.h / 2, POWERUP_COLORS[pw.type]);
         this.floatText(POWERUP_PICKUP_TEXT[pw.type], p.x + p.w / 2, p.y - 8);
+        if (pw.type === 'S') sfx.coin();
+        else sfx.pickup();
         this.powerups.splice(i, 1);
         i--;
         continue;

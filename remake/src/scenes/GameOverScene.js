@@ -6,6 +6,7 @@ import {
 } from '../constants.js';
 import { setupCamera, textStyle } from '../utils.js';
 import { drawSkyGradient } from '../fx.js';
+import { sfx } from '../audio.js';
 
 export class GameOverScene extends Phaser.Scene {
   constructor() {
@@ -72,7 +73,12 @@ export class GameOverScene extends Phaser.Scene {
     });
 
     // restart skips the menu, same as the original
-    this.input.once('pointerdown', () => this.scene.start('Game'));
-    this.input.keyboard.once('keydown-R', () => this.scene.start('Game'));
+    const restart = () => {
+      sfx.init();
+      sfx.uiClick();
+      this.scene.start('Game');
+    };
+    this.input.once('pointerdown', restart);
+    this.input.keyboard.once('keydown-R', restart);
   }
 }

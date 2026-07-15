@@ -1,0 +1,150 @@
+// Synthesized sound effects via Web Audio — no asset files, SFX only, no
+// music. Everything is deliberately quiet and soft-edged: tones get a short
+// linear attack (no clicky onsets) and exponential decay. Frequent sounds
+// (block landings) are throttled, pitch-randomized, and volume-ducked so
+// late-game block rain never turns into a machine gun.
+
+const MASTER_VOL = 0.35;
+const MUTE_KEY = 'dodgeblock-muted';
+
+class Sfx {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.noiseBuf = null;
+    this.plays = 0; // debug/testing counter
+    this.muted =
+      typeof localStorage !== 'undefined' && localStorage.getItem(MUTE_KEY) === '1';
+    this.lastBlockLand = 0;
+    this.recentLands = [];
+  }
+
+  // Must be called from a user-gesture handler (browser autoplay policy).
+  // The menu/game-over click handlers do this; safe to call repeatedly.
+  init() {
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : MASTER_VOL;
+    this.master.connect(this.ctx.destination);
+    // 0.2s of white noise, reused by every noise burst
+    const len = Math.floor(this.ctx.sampleRate * 0.2);
+    this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const data = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    if (this.master) this.master.gain.value = this.muted ? 0 : MASTER_VOL;
+    try {
+      localStorage.setItem(MUTE_KEY, this.muted ? '1' : '0');
+    } catch {
+      /* private browsing */
+    }
+    return this.muted;
+  }
+
+  get ready() {
+    return !!this.ctx && !this.muted;
+  }
+
+  tone(freq, end, dur, type = 'sine', vol = 0.15, delay = 0) {
+    if (!this.ready) return;
+    this.plays++;
+    const t0 = this.ctx.currentTime + delay;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    if (end !== freq) o.frequency.exponentialRampToValueAtTime(end, t0 + dur);
+    // short attack so the onset never clicks
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g);
+    g.connect(this.master);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
+  }
+
+  noise(dur, vol, filterFreq, delay = 0) {
+    if (!this.ready) return;
+    this.plays++;
+    const t0 = this.ctx.currentTime + delay;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = filterFreq;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(f);
+    f.connect(g);
+    g.connect(this.master);
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
+  }
+
+  // --- game sounds ---
+
+  uiClick() {
+    this.tone(900, 650, 0.05, 'sine', 0.08);
+  }
+
+  jump() {
+    this.tone(300, 470, 0.09, 'triangle', 0.12);
+  }
+
+  land() {
+    this.tone(150, 95, 0.08, 'sine', 0.11);
+  }
+
+  // wooden "tok" — throttled and ducked so block rain stays gentle
+  blockLand() {
+    if (!this.ready) return;
+    const now = performance.now();
+    if (now - this.lastBlockLand < 50) return;
+    this.lastBlockLand = now;
+    this.recentLands = this.recentLands.filter((t) => now - t < 400);
+    this.recentLands.push(now);
+    const vol = 0.1 / (1 + 0.4 * (this.recentLands.length - 1));
+    const f = 170 + Math.random() * 60;
+    this.tone(f, f * 0.75, 0.07, 'triangle', vol);
+    this.noise(0.03, vol * 0.5, 1200);
+  }
+
+  // warm two-note chime for shield/speed/jump/boost
+  pickup() {
+    this.tone(523, 523, 0.1, 'sine', 0.14);
+    this.tone(784, 784, 0.16, 'sine', 0.13, 0.07);
+  }
+
+  // brighter double ding for coins
+  coin() {
+    this.tone(988, 988, 0.08, 'sine', 0.12);
+    this.tone(1319, 1319, 0.14, 'sine', 0.11, 0.06);
+  }
+
+  // shield eating a block: soft pop
+  shieldPop() {
+    this.noise(0.06, 0.12, 800);
+    this.tone(280, 140, 0.12, 'sine', 0.12);
+  }
+
+  // gentle descending "whomp", not a buzzer
+  death() {
+    this.tone(300, 140, 0.45, 'triangle', 0.15);
+    this.tone(150, 70, 0.5, 'sine', 0.13, 0.05);
+  }
+}
+
+export const sfx = new Sfx();

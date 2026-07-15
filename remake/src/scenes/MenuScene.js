@@ -7,6 +7,7 @@ import {
 import { setupCamera, textStyle } from '../utils.js';
 import { drawSkyGradient, drawCloud } from '../fx.js';
 import { drawBlock } from '../blocks.js';
+import { sfx } from '../audio.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -65,7 +66,16 @@ export class MenuScene extends Phaser.Scene {
         textStyle(24, { color: '#20455e', align: 'center' }),
       )
       .setOrigin(0.5);
+    this.add
+      .text(400, 472, 'M to mute', textStyle(16, { color: '#20455e' }))
+      .setOrigin(0.5)
+      .setAlpha(0.7);
 
-    this.input.once('pointerdown', () => this.scene.start('Game'));
+    this.input.once('pointerdown', () => {
+      // first user gesture: the browser lets us create the AudioContext here
+      sfx.init();
+      sfx.uiClick();
+      this.scene.start('Game');
+    });
   }
 }

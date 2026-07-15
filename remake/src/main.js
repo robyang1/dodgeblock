@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_W, GAME_H, RES } from './constants.js';
+import { sfx } from './audio.js';
 import { MenuScene } from './scenes/MenuScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
@@ -21,5 +22,6 @@ const game = new Phaser.Game({
   scene: [MenuScene, GameScene, GameOverScene],
 });
 
-// handle for devtools poking and automated tests
+// handles for devtools poking and automated tests
 window.game = game;
+window.sfx = sfx;
