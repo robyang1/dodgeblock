@@ -49,11 +49,11 @@ export class GameOverScene extends Phaser.Scene {
         .text(x + w, y, String(value), textStyle(19, { color: '#223447', fontStyle: 'bold' }))
         .setOrigin(1, 0.5);
     };
-    stat(150, 250, 'Height reached', Math.round(s.camY) + ' cm');
-    stat(150, 285, 'Total blocks', s.blocksLen);
-    stat(150, 320, 'Coins collected', s.scoreCoins / 200 + ' × 200');
-    stat(425, 250, 'Frames per block', s.framesPerBlock, 255);
-    stat(425, 285, 'Canvas size', Math.round(display.width) + '×' + Math.round(display.height), 255);
+    stat(145, 250, 'Height reached', Math.round(s.camY) + ' cm', 260);
+    stat(145, 285, 'Total blocks', s.blocksLen, 260);
+    stat(145, 320, 'Coins collected', s.scoreCoins / 200 + ' × 200', 260);
+    stat(440, 250, 'Frames per block', s.framesPerBlock, 245);
+    stat(440, 285, 'Canvas size', Math.round(display.width) + '×' + Math.round(display.height), 245);
 
     const again = this.add
       .text(400, 445, 'Click or press R to play again', textStyle(26, {

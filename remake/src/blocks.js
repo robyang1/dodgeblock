@@ -5,6 +5,7 @@ import {
   BLOCK_H,
   SPAWN_MIN_X,
   SPAWN_MAX_X,
+  SPAWN_GRID,
   BLOCK_UPDATE_WINDOW,
   FAITHFUL_GROUND_BREAK,
   COLOR_BLOCK_FILLS,
@@ -12,8 +13,21 @@ import {
   COLOR_BLOCK_TOP,
   COLOR_BLOCK_SHADE,
   COLOR_WARNING,
+  RES,
 } from './constants.js';
 import { rectrect, randomInt } from './utils.js';
+
+// Block-on-block stacking test: strict in x (unlike the inclusive rectrect),
+// so edge-touching neighbors don't count as support. On the SPAWN_GRID this
+// guarantees every seated block overlaps its support by >= SPAWN_GRID px.
+// Player and powerup collisions still use the faithful inclusive rectrect.
+function stackContact(a, b) {
+  return (
+    a.x + a.w > b.x &&
+    b.x + b.w > a.x &&
+    ((a.y <= b.y && b.y <= a.y + a.h) || (b.y <= a.y && a.y <= b.y + b.h))
+  );
+}
 
 export class Block {
   constructor(x, y, w, h, shade = 0) {
@@ -44,8 +58,10 @@ export class BlockManager {
   }
 
   spawn(camY, framesPerBlock) {
+    // x snapped to the quarter-block grid (see SPAWN_GRID in constants.js)
+    const cells = Math.floor((SPAWN_MAX_X - SPAWN_MIN_X) / SPAWN_GRID) + 1;
     const b = new Block(
-      randomInt(SPAWN_MIN_X, SPAWN_MAX_X),
+      SPAWN_MIN_X + SPAWN_GRID * randomInt(0, cells),
       -camY - 280 + Math.round(1000 / framesPerBlock),
       BLOCK_W,
       BLOCK_H,
@@ -91,7 +107,7 @@ export class BlockManager {
       } else {
         const layer = this.layerFor(c);
         for (let j = 0; j < layer.length; j++) {
-          if (rectrect(b, layer[j])) {
+          if (stackContact(b, layer[j])) {
             this.fixAt(b, c + 1);
             fixed = true;
             break;
@@ -118,18 +134,50 @@ export class BlockManager {
   }
 }
 
-export function drawBlock(gfx, b) {
-  const x = Math.round(b.x);
-  const y = b.y;
-  gfx.lineStyle(2, COLOR_BLOCK_BORDER);
-  gfx.fillStyle(COLOR_BLOCK_FILLS[b.shade] ?? COLOR_BLOCK_FILLS[0]);
-  gfx.fillRoundedRect(x, y, b.w, b.h, 6);
-  gfx.strokeRoundedRect(x, y, b.w, b.h, 6);
+// Draws one block's vector art at scale k with its top-left at (ox, oy).
+// The body rect is inset by the stroke's half-width so a texture bake at
+// exactly (BLOCK_W*k, BLOCK_H*k) doesn't clip the border.
+function drawBlockArt(gfx, ox, oy, shade, k) {
+  const w = BLOCK_W * k;
+  const h = BLOCK_H * k;
+  gfx.lineStyle(2 * k, COLOR_BLOCK_BORDER);
+  gfx.fillStyle(COLOR_BLOCK_FILLS[shade] ?? COLOR_BLOCK_FILLS[0]);
+  gfx.fillRoundedRect(ox + k, oy + k, w - 2 * k, h - 2 * k, 6 * k);
+  gfx.strokeRoundedRect(ox + k, oy + k, w - 2 * k, h - 2 * k, 6 * k);
   // bevel: light top edge, shaded bottom edge
   gfx.fillStyle(COLOR_BLOCK_TOP, 0.55);
-  gfx.fillRoundedRect(x + 3, y + 3, b.w - 6, 8, { tl: 4, tr: 4, bl: 2, br: 2 });
+  gfx.fillRoundedRect(ox + 3 * k, oy + 3 * k, w - 6 * k, 8 * k, {
+    tl: 4 * k, tr: 4 * k, bl: 2 * k, br: 2 * k,
+  });
   gfx.fillStyle(COLOR_BLOCK_SHADE, 0.35);
-  gfx.fillRoundedRect(x + 3, y + b.h - 9, b.w - 6, 6, { tl: 2, tr: 2, bl: 4, br: 4 });
+  gfx.fillRoundedRect(ox + 3 * k, oy + h - 9 * k, w - 6 * k, 6 * k, {
+    tl: 2 * k, tr: 2 * k, bl: 4 * k, br: 4 * k,
+  });
+}
+
+// Immediate-mode vector draw, used by the menu's decorative blocks
+export function drawBlock(gfx, b) {
+  drawBlockArt(gfx, Math.round(b.x), b.y, b.shade ?? 0, 1);
+}
+
+// In-game blocks render as batched sprites instead: all shades are baked
+// once into a single texture (one atlas -> one draw call for every block on
+// screen), at RES density so they stay crisp under the camera zoom.
+export const BLOCK_TEX = 'block-tiles';
+
+export function bakeBlockTextures(scene) {
+  if (scene.textures.exists(BLOCK_TEX)) return;
+  const n = COLOR_BLOCK_FILLS.length;
+  const g = scene.make.graphics({ add: false });
+  for (let s = 0; s < n; s++) {
+    drawBlockArt(g, s * BLOCK_W * RES, 0, s, RES);
+  }
+  g.generateTexture(BLOCK_TEX, n * BLOCK_W * RES, BLOCK_H * RES);
+  g.destroy();
+  const tex = scene.textures.get(BLOCK_TEX);
+  for (let s = 0; s < n; s++) {
+    tex.add('shade' + s, 0, s * BLOCK_W * RES, 0, BLOCK_W * RES, BLOCK_H * RES);
+  }
 }
 
 // Pulsing warning marker at the top of the screen for a falling block above

@@ -7,6 +7,7 @@ import {
   HMOV,
   HMOV_BOOSTED,
   GROUND,
+  BLOCK_W,
   BLOCK_H,
   BLOCK_UPDATE_WINDOW,
   BLOCK_COLLIDE_WINDOW,
@@ -28,11 +29,25 @@ import {
   COLOR_SOIL_TOP,
   COLOR_SOIL_BOTTOM,
   POWERUP_COLORS,
+  RES,
 } from '../constants.js';
-import { rectrect, constrain, randomInt, setupCamera, textStyle } from '../utils.js';
+import {
+  rectrect,
+  constrain,
+  randomInt,
+  setupCamera,
+  textStyle,
+  bakeDigitFont,
+  DIGIT_FONT,
+} from '../utils.js';
 import { createInput } from '../input.js';
 import { Player } from '../player.js';
-import { BlockManager, drawBlock, drawWarningStrip } from '../blocks.js';
+import {
+  BlockManager,
+  drawWarningStrip,
+  bakeBlockTextures,
+  BLOCK_TEX,
+} from '../blocks.js';
 import {
   Powerup,
   drawPowerup,
@@ -124,23 +139,39 @@ export class GameScene extends Phaser.Scene {
 
     // --- world rendering: container translated by (tX, camY) each frame,
     // exactly like the original's translate() ---
+    bakeBlockTextures(this);
     this.worldContainer = this.add.container(0, 0);
-    this.staticGfx = this.add.graphics(); // ground + fixed blocks
-    this.dynamicGfx = this.add.graphics(); // falling blocks, player, powerups
-    this.worldContainer.add([this.staticGfx, this.dynamicGfx]);
+    this.staticGfx = this.add.graphics(); // ground
+    this.blockLayer = this.add.container(0, 0); // pooled block sprites
+    this.dynamicGfx = this.add.graphics(); // strips, player, powerups, particles
+    this.worldContainer.add([this.staticGfx, this.blockLayer, this.dynamicGfx]);
+    this.blockSprites = [];
     this.worldTextPool = [];
 
     // --- HUD (screen space) ---
+    // Rows split into a static label (Text, rasterized once) and a
+    // digits-only BitmapText value from the baked digit font — so the
+    // per-frame number changes never re-rasterize anything.
     this.hudGfx = this.add.graphics();
+    const { letterSpacing } = bakeDigitFont(this);
     const hudStyle = textStyle(25, {
       color: '#ffffff',
       fontStyle: 'bold',
       stroke: '#2b5876',
       strokeThickness: 5,
     });
-    this.scoreText = this.add.text(790, 16, '', hudStyle).setOrigin(1, 0.5);
-    this.fpbText = this.add.text(790, 44, '', hudStyle).setOrigin(1, 0.5);
-    this.fpsText = this.add.text(790, 71, '', hudStyle).setOrigin(1, 0.5);
+    const hudRow = (y, labelStr) => {
+      const label = this.add.text(0, y, labelStr, hudStyle).setOrigin(1, 0.5);
+      const value = this.add
+        .bitmapText(790, y, DIGIT_FONT, '')
+        .setOrigin(1, 0.5)
+        .setLetterSpacing(letterSpacing)
+        .setScale(1 / RES); // glyphs are baked at RES density
+      return { label, value };
+    };
+    this.scoreRow = hudRow(16, 'Score:');
+    this.fpbRow = hudRow(44, 'Frames Per Block:');
+    this.fpsRow = hudRow(71, 'FPS:');
     this.hudIconTexts = {};
     for (const icon of HUD_ICONS) {
       const label = POWERUP_LABEL[icon.type];
@@ -422,6 +453,17 @@ export class GameScene extends Phaser.Scene {
     sg.fillRect(GROUND.x, GROUND.y + 12, GROUND.w, 4);
     const layers = this.blocksMgr.layers;
     // layer L sits at y = 300 - 40L; visible when -camY-40 <= y < -camY+500
+    // Blocks render as pooled sprites from the baked atlas — one batched
+    // draw call for the whole stack, no per-frame vector tessellation.
+    let spriteIdx = 0;
+    const stamp = (b) => {
+      const img = this.getBlockSprite(spriteIdx++);
+      img.setPosition(Math.round(b.x), b.y);
+      const frame = 'shade' + b.shade;
+      // don't let setFrame reset the display size (it's texture-res sized)
+      if (img.frame.name !== frame) img.setFrame(frame, false, false);
+      img.setVisible(true);
+    };
     const lMin = Math.max(1, Math.floor((camY - 200) / BLOCK_H) + 1);
     const lMax = Math.min(layers.length - 1, Math.floor((camY + 340) / BLOCK_H));
     for (let L = lMin; L <= lMax; L++) {
@@ -431,7 +473,7 @@ export class GameScene extends Phaser.Scene {
         // faithful culls: last-200 draw window + horizontal distance
         if (b.idx < windowLo) continue;
         if (Math.abs(b.x + b.w / 2 - playerCx) >= 800) continue;
-        drawBlock(sg, b);
+        stamp(b);
       }
     }
 
@@ -446,8 +488,11 @@ export class GameScene extends Phaser.Scene {
       if (b.y + camY < -b.h) {
         drawWarningStrip(dg, b, camY, pulse);
       } else {
-        drawBlock(dg, b);
+        stamp(b);
       }
+    }
+    for (let i = spriteIdx; i < this.blockSprites.length; i++) {
+      this.blockSprites[i].setVisible(false);
     }
     p.draw(dg, this.elapsedFrames);
 
@@ -472,6 +517,16 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.fx.draw(dg);
+  }
+
+  getBlockSprite(i) {
+    while (this.blockSprites.length <= i) {
+      const img = this.make.image({ key: BLOCK_TEX, frame: 'shade0', add: false });
+      img.setOrigin(0, 0).setDisplaySize(BLOCK_W, BLOCK_H).setVisible(false);
+      this.blockLayer.add(img);
+      this.blockSprites.push(img);
+    }
+    return this.blockSprites[i];
   }
 
   getWorldText(i) {
@@ -515,12 +570,21 @@ export class GameScene extends Phaser.Scene {
       if (label) label.setVisible(show);
     }
 
-    this.setTextIfChanged(this.scoreText, 'Score: ' + this.score);
-    this.setTextIfChanged(this.fpbText, 'Frames Per Block: ' + this.framesPerBlock);
-    this.setTextIfChanged(this.fpsText, 'FPS: ' + Math.round(this.game.loop.actualFps));
+    this.setHudRow(this.scoreRow, String(this.score));
+    this.setHudRow(this.fpbRow, String(this.framesPerBlock));
+    // sample the FPS readout a few times per second — updating it every
+    // frame is noise, and doing so exactly when FPS is unstable is worst
+    if (this.elapsedFrames % 15 === 0 || this.fpsRow.value.text === '') {
+      this.setHudRow(this.fpsRow, String(Math.round(this.game.loop.actualFps)));
+    }
   }
 
-  setTextIfChanged(obj, str) {
-    if (obj.text !== str) obj.setText(str);
+  // digit quads update + static label slides to stay left of the number;
+  // both are transform-only — no rasterization
+  setHudRow(row, str) {
+    if (row.value.text !== str) {
+      row.value.setText(str);
+      row.label.x = 790 - row.value.displayWidth - 8;
+    }
   }
 }

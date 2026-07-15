@@ -41,6 +41,12 @@ export const BLOCK_W = 60;
 export const BLOCK_H = 40;
 export const SPAWN_MIN_X = -100;
 export const SPAWN_MAX_X = 840;
+// Remaster: block spawn x snaps to a quarter-block grid, and stacking
+// requires strict x-overlap — so blocks always overlap their support by at
+// least SPAWN_GRID px and never balance on a rounded corner. (The original
+// spawned at any integer x and stacked on inclusive-edge contact, allowing
+// 0px-overlap "floating" catches.)
+export const SPAWN_GRID = BLOCK_W / 4; // 15
 
 export const GROUND = { x: -100, y: 300, w: 1000, h: 900 };
 
