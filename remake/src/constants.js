@@ -66,16 +66,40 @@ export const POWERUP_CYCLE = 35; // pwrCounter % 35 → spawn schedule
 // every other falling block for a frame. Off = fixed.
 export const FAITHFUL_GROUND_BREAK = false;
 
-// Colors
-export const COLOR_BG_GAME = 0xb0e8ff; // rgb(176,232,255)
-export const COLOR_BG_MENU = 0xd7ecfa; // rgb(215,236,250)
-export const COLOR_BG_DEAD = 0xdcdcdc; // gray 220
-export const COLOR_BLOCK_FILL = 0xdeb887; // rgb(222,184,135)
-export const COLOR_STROKE_GRAY = 0x323232; // gray 50
-export const COLOR_PLAYER = 0xff0000;
-export const COLOR_SHIELD = 0x1bd182; // rgb(27,209,130)
-export const COLOR_POWERUP_FILL = 0xa3d11b; // rgb(163,209,27)
-export const COLOR_COIN_FILL = 0xffd700; // rgb(255,215,0)
-export const COLOR_COIN_STROKE = 0xba9f00; // rgb(186,159,0)
+// Colors — sky
+export const COLOR_SKY_TOP = 0x6ec0f2;
+export const COLOR_SKY_BOTTOM = 0xd8f0ff;
+export const COLOR_DEAD_SKY_TOP = 0x42556e;
+export const COLOR_DEAD_SKY_BOTTOM = 0x7d90a8;
+export const COLOR_BG_GAME = 0xb0e8ff; // camera fallback behind the gradient
 
-export const FONT = 'Arial, Helvetica, sans-serif';
+// blocks
+export const COLOR_BLOCK_FILLS = [0xd9a066, 0xd2985c, 0xe0aa70]; // subtle variation
+export const COLOR_BLOCK_BORDER = 0x6e4a2a;
+export const COLOR_BLOCK_TOP = 0xf2cf96; // bevel highlight
+export const COLOR_BLOCK_SHADE = 0x8a5f33; // bevel shadow
+export const COLOR_WARNING = 0xff3b30;
+
+// ground
+export const COLOR_GRASS = 0x5db33f;
+export const COLOR_GRASS_DARK = 0x468a2e;
+export const COLOR_SOIL_TOP = 0x7a5230;
+export const COLOR_SOIL_BOTTOM = 0x462d17;
+
+// player
+export const COLOR_PLAYER = 0xe8433f;
+export const COLOR_PLAYER_BORDER = 0xa32b28;
+export const COLOR_PLAYER_MOUTH = 0x5c1f1d;
+export const COLOR_SHIELD = 0x2ee6a8;
+
+// powerup badge colors, keyed by type
+export const POWERUP_COLORS = {
+  I: 0x2ee6a8, // shield — green
+  H: 0xff9f1c, // horizontal speed — orange
+  D: 0x9b5de5, // double jump — purple
+  V: 0x00bbf9, // vertical boost — blue
+  S: 0xffd700, // coin — gold
+};
+export const COLOR_COIN_STROKE = 0xb8860b;
+
+export const FONT = "'Trebuchet MS', Verdana, Arial, sans-serif";

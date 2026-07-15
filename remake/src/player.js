@@ -10,6 +10,8 @@ import {
   PLAYER_MIN_X,
   PLAYER_MAX_X,
   COLOR_PLAYER,
+  COLOR_PLAYER_BORDER,
+  COLOR_PLAYER_MOUTH,
   COLOR_SHIELD,
 } from './constants.js';
 import { constrain } from './utils.js';
@@ -33,6 +35,8 @@ export class Player {
     this.jumps = 0;
     // x before the last updateX(), used to undo walking into a block
     this.originalPos = this.x;
+    // cosmetic only: landing squash countdown, set by the scene
+    this.landSquash = 0;
   }
 
   // jKeyLetGo === 1 means the jump key was pressed this very step
@@ -71,49 +75,83 @@ export class Player {
     this.y -= this.yVel;
   }
 
-  draw(gfx) {
-    gfx.fillStyle(COLOR_PLAYER);
-    gfx.fillRoundedRect(this.x, this.y, this.w, this.h, this.w / 10);
-    gfx.fillStyle(0x000000);
+  draw(gfx, tick) {
+    // squash & stretch (render-only; collisions use the true 30x30 box):
+    // stretch tall while moving fast vertically, squash flat just after landing
+    let stretch;
+    if (this.landSquash > 0) {
+      stretch = -0.16 * (this.landSquash / 8);
+    } else if (this.offGround > 2) {
+      stretch = Math.min(Math.abs(this.yVel) * 0.016, 0.2);
+    } else {
+      stretch = 0;
+    }
+    const w = this.w * (1 - stretch);
+    const h = this.h * (1 + stretch);
+    const x = this.x - (w - this.w) / 2; // keep centered horizontally
+    const y = this.y + (this.h - h); // keep feet anchored
 
-    // face position: 3 vertical states x 3 look directions
-    let eyeY, mouthY;
+    gfx.lineStyle(2, COLOR_PLAYER_BORDER);
+    gfx.fillStyle(COLOR_PLAYER);
+    gfx.fillRoundedRect(x, y, w, h, w / 6);
+    gfx.strokeRoundedRect(x, y, w, h, w / 6);
+
+    // face: 3 vertical states x 3 look directions (original costume grid)
+    let eyeY, mouthY, mouthH, pupilDy;
     if (this.yVel > 0.5) {
-      eyeY = 0.22;
-      mouthY = 0.54;
+      eyeY = 0.26;
+      mouthY = 0.56;
+      mouthH = 0.28; // surprised, mid-jump
+      pupilDy = -1;
     } else if (this.yVel < -3.3) {
-      eyeY = 0.43;
-      mouthY = 0.73;
+      eyeY = 0.44;
+      mouthY = 0.74;
+      mouthH = 0.24; // worried, falling fast
+      pupilDy = 1;
     } else {
-      eyeY = 1 / 3;
-      mouthY = 2 / 3;
+      eyeY = 0.36;
+      mouthY = 0.66;
+      mouthH = 0.15;
+      pupilDy = 0;
     }
-    let eye1X, eye2X, mouthX;
+    let eye1X, eye2X, mouthX, pupilDx;
     if (this.xVel > 0.8) {
-      eye1X = 0.3;
-      eye2X = 0.75;
-      mouthX = 0.4;
+      eye1X = 0.34;
+      eye2X = 0.76;
+      mouthX = 0.42;
+      pupilDx = 1;
     } else if (this.xVel < -0.8) {
-      eye1X = 0.1;
-      eye2X = 0.55;
-      mouthX = 0.2;
+      eye1X = 0.24;
+      eye2X = 0.66;
+      mouthX = 0.26;
+      pupilDx = -1;
     } else {
-      eye1X = 0.2;
-      eye2X = 0.65;
-      mouthX = 0.3;
+      eye1X = 0.29;
+      eye2X = 0.71;
+      mouthX = 0.34;
+      pupilDx = 0;
     }
-    gfx.fillRect(this.x + this.w * eye1X, this.y + this.h * eyeY, this.w * 0.15, this.h * 0.15);
-    gfx.fillRect(this.x + this.w * eye2X, this.y + this.h * eyeY, this.w * 0.15, this.h * 0.15);
-    gfx.fillRect(this.x + this.w * mouthX, this.y + this.h * mouthY, this.w * 0.4, this.h * 0.25);
+
+    const eyeR = w * 0.125;
+    for (const ex of [eye1X, eye2X]) {
+      const cx = x + w * ex;
+      const cy = y + h * eyeY;
+      gfx.fillStyle(0xffffff);
+      gfx.fillCircle(cx, cy, eyeR);
+      gfx.fillStyle(0x1c1c1c);
+      gfx.fillCircle(cx + pupilDx * eyeR * 0.35, cy + pupilDy * eyeR * 0.3, eyeR * 0.5);
+    }
+    gfx.fillStyle(COLOR_PLAYER_MOUTH);
+    gfx.fillRoundedRect(x + w * mouthX, y + h * mouthY, w * 0.32, h * mouthH, 3);
 
     if (this.shieldTimer > 0) {
-      gfx.lineStyle(this.w / 15, COLOR_SHIELD);
-      gfx.strokeEllipse(
-        this.x + this.w / 2,
-        this.y + this.h / 2,
-        this.w * 1.414,
-        this.h * 1.414,
-      );
+      const cx = this.x + this.w / 2;
+      const cy = this.y + this.h / 2;
+      const r = 1.414 + 0.06 * Math.sin(tick * 0.2); // gentle pulse
+      gfx.lineStyle(6, COLOR_SHIELD, 0.22);
+      gfx.strokeEllipse(cx, cy, this.w * r * 1.15, this.h * r * 1.15);
+      gfx.lineStyle(2.5, COLOR_SHIELD, 0.95);
+      gfx.strokeEllipse(cx, cy, this.w * r, this.h * r);
     }
   }
 }

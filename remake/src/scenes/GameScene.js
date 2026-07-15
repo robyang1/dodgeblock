@@ -21,12 +21,25 @@ import {
   POWERUP_TIMER_CAP,
   POWERUP_CYCLE,
   COLOR_BG_GAME,
+  COLOR_SKY_TOP,
+  COLOR_SKY_BOTTOM,
+  COLOR_GRASS,
+  COLOR_GRASS_DARK,
+  COLOR_SOIL_TOP,
+  COLOR_SOIL_BOTTOM,
+  POWERUP_COLORS,
 } from '../constants.js';
 import { rectrect, constrain, randomInt, setupCamera, textStyle } from '../utils.js';
 import { createInput } from '../input.js';
 import { Player } from '../player.js';
 import { BlockManager, drawBlock, drawWarningStrip } from '../blocks.js';
-import { Powerup, drawPowerup, POWERUP_LABEL } from '../powerups.js';
+import {
+  Powerup,
+  drawPowerup,
+  POWERUP_LABEL,
+  POWERUP_PICKUP_TEXT,
+} from '../powerups.js';
+import { ParticleFx, drawSkyGradient, makeClouds, drawClouds } from '../fx.js';
 
 // Dev stress test: ?stress forces a block every 2 sim steps
 const STRESS =
@@ -67,6 +80,17 @@ export class GameScene extends Phaser.Scene {
     this.accumulator = 0;
     this.dead = false;
 
+    // --- render-only state ---
+    this.fx = new ParticleFx();
+    this.clouds = makeClouds(5);
+    this.blocksMgr.onFix = (b) =>
+      this.fx.dust(b.x + b.w / 2, b.y + b.h, 7, 0xcbb391);
+
+    // --- backdrop (screen space, behind the world) ---
+    const sky = this.add.graphics();
+    drawSkyGradient(sky, COLOR_SKY_TOP, COLOR_SKY_BOTTOM);
+    this.cloudGfx = this.add.graphics();
+
     // --- world rendering: container translated by (tX, camY) each frame,
     // exactly like the original's translate() ---
     this.worldContainer = this.add.container(0, 0);
@@ -77,10 +101,15 @@ export class GameScene extends Phaser.Scene {
 
     // --- HUD (screen space) ---
     this.hudGfx = this.add.graphics();
-    const hudStyle = textStyle(25);
-    this.scoreText = this.add.text(790, 13, '', hudStyle).setOrigin(1, 0.5);
-    this.fpbText = this.add.text(790, 40, '', hudStyle).setOrigin(1, 0.5);
-    this.fpsText = this.add.text(790, 67, '', hudStyle).setOrigin(1, 0.5);
+    const hudStyle = textStyle(25, {
+      color: '#ffffff',
+      fontStyle: 'bold',
+      stroke: '#2b5876',
+      strokeThickness: 5,
+    });
+    this.scoreText = this.add.text(790, 16, '', hudStyle).setOrigin(1, 0.5);
+    this.fpbText = this.add.text(790, 44, '', hudStyle).setOrigin(1, 0.5);
+    this.fpsText = this.add.text(790, 71, '', hudStyle).setOrigin(1, 0.5);
     this.hudIconTexts = {};
     for (const icon of HUD_ICONS) {
       const label = POWERUP_LABEL[icon.type];
@@ -90,7 +119,7 @@ export class GameScene extends Phaser.Scene {
           icon.x + HUD_ICON_SIZE / 2,
           HUD_ICON_Y + HUD_ICON_SIZE / 2,
           label.text,
-          textStyle(label.size),
+          textStyle(label.size, { color: '#ffffff', fontStyle: 'bold' }),
         )
         .setOrigin(0.5)
         .setVisible(false);
@@ -129,6 +158,7 @@ export class GameScene extends Phaser.Scene {
   simStep() {
     this.elapsedFrames++;
     const p = this.player;
+    const wasAirborne = p.offGround; // for the landing-dust effect
 
     this.framesPerBlock = Math.round(12000000 / (this.elapsedFrames * 350 + 100000));
     if (STRESS) this.framesPerBlock = Math.min(this.framesPerBlock, 2);
@@ -191,7 +221,15 @@ export class GameScene extends Phaser.Scene {
     // second landing snap at classic/script.js:579)
     this.landSquishPass(-0.1);
 
+    // landing feedback (render-only)
+    if (p.landSquash > 0) p.landSquash--;
+    if (p.offGround === 0 && wasAirborne > 4) {
+      p.landSquash = 8;
+      this.fx.dust(p.x + p.w / 2, p.y + p.h, 6);
+    }
+
     this.updatePowerups();
+    this.fx.update();
 
     p.offGround++;
     p.timeSinceJump++;
@@ -220,6 +258,7 @@ export class GameScene extends Phaser.Scene {
           p.jumps = 0;
         } else if (b.yVel > SQUISH_VEL) {
           if (p.shieldTimer > 0) {
+            this.fx.burst(b.x + b.w / 2, b.y + b.h / 2, POWERUP_COLORS.I, 12);
             this.blocksMgr.remove(b);
             i--;
             continue;
@@ -283,6 +322,9 @@ export class GameScene extends Phaser.Scene {
             this.scoreCoins += 200;
             break;
         }
+        // pickup feedback (render-only)
+        this.fx.burst(pw.x + pw.w / 2, pw.y + pw.h / 2, POWERUP_COLORS[pw.type]);
+        this.floatText(POWERUP_PICKUP_TEXT[pw.type], p.x + p.w / 2, p.y - 8);
         this.powerups.splice(i, 1);
         i--;
         continue;
@@ -295,11 +337,34 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // small rising label in world space; rare, so a throwaway Text is fine
+  floatText(str, x, y) {
+    const t = this.add
+      .text(x, y, str, textStyle(13, {
+        color: '#ffffff',
+        fontStyle: 'bold',
+        stroke: '#2b5876',
+        strokeThickness: 4,
+      }))
+      .setOrigin(0.5);
+    this.worldContainer.add(t);
+    this.tweens.add({
+      targets: t,
+      y: y - 34,
+      alpha: 0,
+      duration: 700,
+      ease: 'Cubic.easeOut',
+      onComplete: () => t.destroy(),
+    });
+  }
+
   renderWorld() {
     const p = this.player;
     const camY = this.camY;
     const tX = -constrain(p.x - 400, -100, 100);
     this.worldContainer.setPosition(tX, camY);
+
+    drawClouds(this.cloudGfx, this.clouds, this.elapsedFrames, camY);
 
     const playerCx = p.x + p.w / 2;
     const blocks = this.blocksMgr.blocks;
@@ -310,9 +375,13 @@ export class GameScene extends Phaser.Scene {
     // no matter how many total blocks exist)
     const sg = this.staticGfx;
     sg.clear();
-    // the original always drew the ground with a stale black fill — kept
-    sg.fillStyle(0x000000);
+    // grass-topped soil instead of the original's accidental black slab
+    sg.fillGradientStyle(COLOR_SOIL_TOP, COLOR_SOIL_TOP, COLOR_SOIL_BOTTOM, COLOR_SOIL_BOTTOM, 1);
     sg.fillRect(GROUND.x, GROUND.y, GROUND.w, GROUND.h);
+    sg.fillStyle(COLOR_GRASS);
+    sg.fillRect(GROUND.x, GROUND.y, GROUND.w, 12);
+    sg.fillStyle(COLOR_GRASS_DARK);
+    sg.fillRect(GROUND.x, GROUND.y + 12, GROUND.w, 4);
     const layers = this.blocksMgr.layers;
     // layer L sits at y = 300 - 40L; visible when -camY-40 <= y < -camY+500
     const lMin = Math.max(1, Math.floor((camY - 200) / BLOCK_H) + 1);
@@ -331,17 +400,18 @@ export class GameScene extends Phaser.Scene {
     // --- dynamic layer: falling blocks, warning strips, player, powerups ---
     const dg = this.dynamicGfx;
     dg.clear();
+    const pulse = (Math.sin(this.elapsedFrames * 0.25) + 1) / 2;
     for (const b of this.blocksMgr.falling) {
       if (b.idx < windowLo) continue;
       if (b.y >= -camY + 500) continue;
       if (Math.abs(b.x + b.w / 2 - playerCx) >= 800) continue;
       if (b.y + camY < -b.h) {
-        drawWarningStrip(dg, b, camY);
+        drawWarningStrip(dg, b, camY, pulse);
       } else {
         drawBlock(dg, b);
       }
     }
-    p.draw(dg);
+    p.draw(dg, this.elapsedFrames);
 
     let textIdx = 0;
     for (const pw of this.powerups) {
@@ -362,12 +432,14 @@ export class GameScene extends Phaser.Scene {
     for (let i = textIdx; i < this.worldTextPool.length; i++) {
       this.worldTextPool[i].setVisible(false);
     }
+
+    this.fx.draw(dg);
   }
 
   getWorldText(i) {
     while (this.worldTextPool.length <= i) {
       const t = this.add
-        .text(0, 0, '', textStyle(10))
+        .text(0, 0, '', textStyle(10, { color: '#ffffff', fontStyle: 'bold' }))
         .setOrigin(0.5)
         .setVisible(false);
       this.worldContainer.add(t);
@@ -387,7 +459,19 @@ export class GameScene extends Phaser.Scene {
       const t = timers[icon.type];
       const show = t > HUD_FLASH_AT || (t > 0 && t < HUD_FLASH_AT && blink);
       if (show) {
-        drawPowerup(hg, { type: icon.type, x: icon.x, y: HUD_ICON_Y, w: HUD_ICON_SIZE, h: HUD_ICON_SIZE });
+        drawPowerup(hg, {
+          type: icon.type,
+          x: icon.x,
+          y: HUD_ICON_Y,
+          w: HUD_ICON_SIZE,
+          h: HUD_ICON_SIZE,
+        });
+        // time-remaining bar under the icon
+        const frac = Math.min(1, t / POWERUP_TIMER_ADD);
+        hg.fillStyle(0x000000, 0.25);
+        hg.fillRect(icon.x, HUD_ICON_Y + HUD_ICON_SIZE + 3, HUD_ICON_SIZE, 3);
+        hg.fillStyle(0xffffff, 0.9);
+        hg.fillRect(icon.x, HUD_ICON_Y + HUD_ICON_SIZE + 3, HUD_ICON_SIZE * frac, 3);
       }
       const label = this.hudIconTexts[icon.type];
       if (label) label.setVisible(show);

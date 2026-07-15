@@ -7,13 +7,16 @@ import {
   SPAWN_MAX_X,
   BLOCK_UPDATE_WINDOW,
   FAITHFUL_GROUND_BREAK,
-  COLOR_BLOCK_FILL,
-  COLOR_STROKE_GRAY,
+  COLOR_BLOCK_FILLS,
+  COLOR_BLOCK_BORDER,
+  COLOR_BLOCK_TOP,
+  COLOR_BLOCK_SHADE,
+  COLOR_WARNING,
 } from './constants.js';
 import { rectrect, randomInt } from './utils.js';
 
 export class Block {
-  constructor(x, y, w, h) {
+  constructor(x, y, w, h, shade = 0) {
     this.x = x;
     this.y = y;
     this.w = w;
@@ -21,6 +24,7 @@ export class Block {
     this.yVel = 0;
     this.fixed = false;
     this.idx = 0; // position in BlockManager.blocks, kept fresh on splice
+    this.shade = shade; // cosmetic color variation
   }
 }
 
@@ -32,6 +36,7 @@ export class BlockManager {
     // The original's `classes` table stored array indices, which the shield
     // splice silently corrupted; we store object references instead.
     this.layers = [[]];
+    this.onFix = null; // render-side hook (landing dust), no sim effect
   }
 
   get length() {
@@ -44,6 +49,7 @@ export class BlockManager {
       -camY - 280 + Math.round(1000 / framesPerBlock),
       BLOCK_W,
       BLOCK_H,
+      randomInt(0, COLOR_BLOCK_FILLS.length),
     );
     b.idx = this.blocks.length;
     this.blocks.push(b);
@@ -60,6 +66,7 @@ export class BlockManager {
     b.fixed = true;
     b.yVel = 0;
     this.layerFor(L).push(b);
+    if (this.onFix) this.onFix(b);
   }
 
   // One sim step of falling-block physics + stack-fixing, mirroring
@@ -112,14 +119,26 @@ export class BlockManager {
 }
 
 export function drawBlock(gfx, b) {
-  gfx.lineStyle(Math.round(b.w / 30), COLOR_STROKE_GRAY);
-  gfx.fillStyle(COLOR_BLOCK_FILL);
-  gfx.fillRoundedRect(Math.round(b.x), b.y, b.w, b.h, b.w / 10);
-  gfx.strokeRoundedRect(Math.round(b.x), b.y, b.w, b.h, b.w / 10);
+  const x = Math.round(b.x);
+  const y = b.y;
+  gfx.lineStyle(2, COLOR_BLOCK_BORDER);
+  gfx.fillStyle(COLOR_BLOCK_FILLS[b.shade] ?? COLOR_BLOCK_FILLS[0]);
+  gfx.fillRoundedRect(x, y, b.w, b.h, 6);
+  gfx.strokeRoundedRect(x, y, b.w, b.h, 6);
+  // bevel: light top edge, shaded bottom edge
+  gfx.fillStyle(COLOR_BLOCK_TOP, 0.55);
+  gfx.fillRoundedRect(x + 3, y + 3, b.w - 6, 8, { tl: 4, tr: 4, bl: 2, br: 2 });
+  gfx.fillStyle(COLOR_BLOCK_SHADE, 0.35);
+  gfx.fillRoundedRect(x + 3, y + b.h - 9, b.w - 6, 6, { tl: 2, tr: 2, bl: 4, br: 4 });
 }
 
-// Red warning strip at the top of the screen for a falling block above view
-export function drawWarningStrip(gfx, b, camY) {
-  gfx.fillStyle(0xff0000);
-  gfx.fillRect(Math.round(b.x), -camY, b.w, 5);
+// Pulsing warning marker at the top of the screen for a falling block above
+// view. `pulse` is 0..1.
+export function drawWarningStrip(gfx, b, camY, pulse) {
+  const x = Math.round(b.x);
+  const cx = x + b.w / 2;
+  gfx.fillStyle(COLOR_WARNING, 0.35 + 0.45 * pulse);
+  gfx.fillRect(x, -camY, b.w, 5);
+  gfx.fillStyle(COLOR_WARNING, 0.25 + 0.65 * pulse);
+  gfx.fillTriangle(cx - 7, -camY + 5, cx + 7, -camY + 5, cx, -camY + 14);
 }

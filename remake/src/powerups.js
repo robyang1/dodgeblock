@@ -1,8 +1,6 @@
 import {
   POWERUP_SIZE,
-  COLOR_SHIELD,
-  COLOR_POWERUP_FILL,
-  COLOR_COIN_FILL,
+  POWERUP_COLORS,
   COLOR_COIN_STROKE,
 } from './constants.js';
 
@@ -21,35 +19,55 @@ export class Powerup {
   }
 }
 
-// Text drawn on top of each powerup (Graphics can't render text; the scene
-// keeps a Text pool for these). Sizes are the original's textSize values
-// for a 20px powerup.
+// Icon text drawn on top of badge powerups (Graphics can't render text; the
+// scene keeps a Text pool for these). Sizes fit a 20px badge.
 export const POWERUP_LABEL = {
-  H: { text: '<->', size: 10 },
+  H: { text: '↔', size: 13 },
   D: { text: '↑↑', size: 10 },
-  V: { text: '↕', size: 20 },
-  S: { text: '+200', size: 20 / 3 },
+  V: { text: '↕', size: 13 },
+};
+
+// Short name floated above the player on pickup
+export const POWERUP_PICKUP_TEXT = {
+  I: 'Shield!',
+  H: 'Speed!',
+  D: 'Double jump!',
+  V: 'Boost!',
+  S: '+200',
 };
 
 export function drawPowerup(gfx, pw) {
+  const color = POWERUP_COLORS[pw.type];
+  const cx = pw.x + pw.w / 2;
+  const cy = pw.y + pw.h / 2;
   switch (pw.type) {
-    case 'I':
-      gfx.lineStyle(2, COLOR_SHIELD);
-      gfx.strokeEllipse(pw.x + pw.w / 2, pw.y + pw.h / 2, pw.w, pw.h);
+    case 'S': // coin: gold disc, darker rim, small shine arc
+      gfx.lineStyle(2, COLOR_COIN_STROKE);
+      gfx.fillStyle(color);
+      gfx.fillEllipse(cx, cy, pw.w, pw.h);
+      gfx.strokeEllipse(cx, cy, pw.w, pw.h);
+      gfx.lineStyle(1.5, COLOR_COIN_STROKE, 0.6);
+      gfx.strokeEllipse(cx, cy, pw.w * 0.6, pw.h * 0.6);
+      gfx.fillStyle(0xffffff, 0.7);
+      gfx.fillEllipse(cx - pw.w * 0.2, cy - pw.h * 0.22, pw.w * 0.18, pw.h * 0.12);
       break;
-    case 'H':
-    case 'D':
-    case 'V':
-      gfx.lineStyle(pw.w / 10, 0x000000);
-      gfx.fillStyle(COLOR_POWERUP_FILL);
-      gfx.fillRect(pw.x, pw.y, pw.w, pw.h);
-      gfx.strokeRect(pw.x, pw.y, pw.w, pw.h);
+    case 'I': // shield: badge with a white ring
+      drawBadge(gfx, pw, color);
+      gfx.lineStyle(2, 0xffffff, 0.95);
+      gfx.strokeEllipse(cx, cy, pw.w * 0.55, pw.h * 0.55);
       break;
-    case 'S':
-      gfx.lineStyle(pw.w / 10, COLOR_COIN_STROKE);
-      gfx.fillStyle(COLOR_COIN_FILL);
-      gfx.fillEllipse(pw.x + pw.w / 2, pw.y + pw.h / 2, pw.w, pw.h);
-      gfx.strokeEllipse(pw.x + pw.w / 2, pw.y + pw.h / 2, pw.w, pw.h);
+    default: // H / D / V: badge; icon text comes from the scene's Text pool
+      drawBadge(gfx, pw, color);
       break;
   }
+}
+
+function drawBadge(gfx, pw, color) {
+  const r = pw.w / 4;
+  gfx.fillStyle(0x000000, 0.18); // soft drop shadow
+  gfx.fillRoundedRect(pw.x + 1.5, pw.y + 2.5, pw.w, pw.h, r);
+  gfx.lineStyle(2, 0xffffff, 0.9);
+  gfx.fillStyle(color);
+  gfx.fillRoundedRect(pw.x, pw.y, pw.w, pw.h, r);
+  gfx.strokeRoundedRect(pw.x, pw.y, pw.w, pw.h, r);
 }
