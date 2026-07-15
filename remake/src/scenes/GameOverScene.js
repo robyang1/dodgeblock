@@ -52,11 +52,12 @@ export class GameOverScene extends Phaser.Scene {
     stat(145, 250, 'Height reached', Math.round(s.camY) + ' cm', 260);
     stat(145, 285, 'Total blocks', s.blocksLen, 260);
     stat(145, 320, 'Coins collected', s.scoreCoins / 200 + ' × 200', 260);
-    stat(440, 250, 'Frames per block', s.framesPerBlock, 245);
+    stat(440, 250, 'Blocks per second', s.blockRate.toFixed(1), 245);
     stat(440, 285, 'Canvas size', Math.round(display.width) + '×' + Math.round(display.height), 245);
 
+    const isTouch = this.sys.game.device.input.touch;
     const again = this.add
-      .text(400, 445, 'Click or press R to play again', textStyle(26, {
+      .text(400, 445, isTouch ? 'Tap to play again' : 'Click or press R to play again', textStyle(26, {
         color: '#ffffff',
         fontStyle: 'bold',
         stroke: '#22303f',
@@ -78,7 +79,11 @@ export class GameOverScene extends Phaser.Scene {
       sfx.uiClick();
       this.scene.start('Game');
     };
-    this.input.once('pointerdown', restart);
-    this.input.keyboard.once('keydown-R', restart);
+    // small delay before arming restart, so frantic tapping at the moment of
+    // death doesn't skip the stats card instantly
+    this.time.delayedCall(400, () => {
+      this.input.once('pointerdown', restart);
+      this.input.keyboard.once('keydown-R', restart);
+    });
   }
 }

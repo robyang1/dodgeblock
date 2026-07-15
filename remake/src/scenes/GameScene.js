@@ -30,6 +30,8 @@ import {
   COLOR_SOIL_BOTTOM,
   POWERUP_COLORS,
   RES,
+  BLOCK_RATE_BASE,
+  BLOCK_RATE_GROWTH,
 } from '../constants.js';
 import {
   rectrect,
@@ -55,6 +57,7 @@ import {
   POWERUP_PICKUP_TEXT,
 } from '../powerups.js';
 import { ParticleFx, drawSkyGradient, makeClouds, drawClouds } from '../fx.js';
+import { TouchHints } from '../touchui.js';
 import { sfx } from '../audio.js';
 
 // Dev stress test: ?stress forces a block every 2 sim steps
@@ -92,7 +95,8 @@ export class GameScene extends Phaser.Scene {
     this.pwrCounter = 0;
     this.scoreCoins = 0;
     this.score = 0;
-    this.framesPerBlock = 120;
+    this.blockRate = BLOCK_RATE_BASE; // blocks per second
+    this.spawnAcc = 0; // fractional blocks owed
     this.accumulator = 0;
     this.dead = false;
 
@@ -170,7 +174,7 @@ export class GameScene extends Phaser.Scene {
       return { label, value };
     };
     this.scoreRow = hudRow(16, 'Score:');
-    this.fpbRow = hudRow(44, 'Frames Per Block:');
+    this.rateRow = hudRow(44, 'Blocks/sec:');
     this.fpsRow = hudRow(71, 'FPS:');
     this.hudIconTexts = {};
     for (const icon of HUD_ICONS) {
@@ -186,6 +190,9 @@ export class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setVisible(false);
     }
+
+    // touch-control hints, created last so the zone flash sits above the HUD
+    if (this.inp.touch) new TouchHints(this, this.inp.touch);
   }
 
   update(time, delta) {
@@ -208,7 +215,7 @@ export class GameScene extends Phaser.Scene {
         camY: this.camY,
         blocksLen: this.blocksMgr.length,
         scoreCoins: this.scoreCoins,
-        framesPerBlock: this.framesPerBlock,
+        blockRate: this.blockRate,
       });
       return;
     }
@@ -223,8 +230,8 @@ export class GameScene extends Phaser.Scene {
     const p = this.player;
     const wasAirborne = p.offGround; // for the landing-dust effect
 
-    this.framesPerBlock = Math.round(12000000 / (this.elapsedFrames * 350 + 100000));
-    if (STRESS) this.framesPerBlock = Math.min(this.framesPerBlock, 2);
+    this.blockRate = BLOCK_RATE_BASE + BLOCK_RATE_GROWTH * this.elapsedFrames;
+    if (STRESS) this.blockRate = Math.max(this.blockRate, 30);
     p.hMov = p.hTimer > 0 ? HMOV_BOOSTED : HMOV;
 
     // input (jKeyLetGo === 1 marks a fresh jump-key press, for double jumps)
@@ -240,9 +247,11 @@ export class GameScene extends Phaser.Scene {
     if (this.inp.right) p.walk(p.hMov);
     if (this.inp.down && p.vTimer > 0) p.yVel -= DOWN_BOOST;
 
-    // spawn a block (and maybe a powerup) on the cadence
-    if (this.elapsedFrames % this.framesPerBlock === 0) {
-      this.blocksMgr.spawn(this.camY, this.framesPerBlock);
+    // spawn blocks (and maybe powerups) by accumulating the smooth rate
+    this.spawnAcc += this.blockRate / 60;
+    while (this.spawnAcc >= 1) {
+      this.spawnAcc -= 1;
+      this.blocksMgr.spawn(this.camY, this.blockRate);
       const spawnX = () => randomInt(SPAWN_MIN_X, SPAWN_MAX_X);
       const spawnY = -this.camY - 40;
       switch (this.pwrCounter % POWERUP_CYCLE) {
@@ -301,7 +310,8 @@ export class GameScene extends Phaser.Scene {
     p.timeSinceJump++;
 
     // camera: slow constant rise, plus snapping up when the player is high
-    this.camY += 2 / this.framesPerBlock;
+    // (the original's 2/fpb per frame == blockRate/30)
+    this.camY += this.blockRate / 30;
     if (p.y + this.camY < 150 && -p.y + 150 > this.camY) {
       this.camY = -p.y + 150;
     }
@@ -571,7 +581,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.setHudRow(this.scoreRow, String(this.score));
-    this.setHudRow(this.fpbRow, String(this.framesPerBlock));
+    this.setHudRow(this.rateRow, this.blockRate.toFixed(1));
     // sample the FPS readout a few times per second — updating it every
     // frame is noise, and doing so exactly when FPS is unstable is worst
     if (this.elapsedFrames % 15 === 0 || this.fpsRow.value.text === '') {

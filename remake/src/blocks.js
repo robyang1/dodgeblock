@@ -57,12 +57,14 @@ export class BlockManager {
     return this.blocks.length;
   }
 
-  spawn(camY, framesPerBlock) {
-    // x snapped to the quarter-block grid (see SPAWN_GRID in constants.js)
+  spawn(camY, blockRate) {
+    // x snapped to the quarter-block grid (see SPAWN_GRID in constants.js);
+    // spawn height creeps down as the rate rises — the original's
+    // round(1000/fpb) offset, expressed in blocks/sec (1000/fpb = rate*50/3)
     const cells = Math.floor((SPAWN_MAX_X - SPAWN_MIN_X) / SPAWN_GRID) + 1;
     const b = new Block(
       SPAWN_MIN_X + SPAWN_GRID * randomInt(0, cells),
-      -camY - 280 + Math.round(1000 / framesPerBlock),
+      -camY - 280 + (blockRate * 50) / 3,
       BLOCK_W,
       BLOCK_H,
       randomInt(0, COLOR_BLOCK_FILLS.length),

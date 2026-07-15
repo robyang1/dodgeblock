@@ -59,7 +59,7 @@ export function bakeDigitFont(scene) {
   // spacing matches the padless Text look
   const spacing = { letterSpacing: -pad * 2 + RES };
   if (scene.cache.bitmapFont.exists(DIGIT_FONT)) return spacing;
-  const chars = '0123456789';
+  const chars = '0123456789.';
   const px = HUD_FONT_SIZE * RES;
   const font = `bold ${px}px ${FONT}`;
 

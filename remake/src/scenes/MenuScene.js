@@ -41,8 +41,9 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setShadow(0, 5, 'rgba(0,0,0,0.25)', 6);
 
+    const isTouch = this.sys.game.device.input.touch;
     const start = this.add
-      .text(400, 270, 'Click to start', textStyle(34, {
+      .text(400, 270, isTouch ? 'Tap to start' : 'Click to start', textStyle(34, {
         color: '#ffffff',
         fontStyle: 'bold',
         stroke: '#2b5876',
@@ -62,7 +63,9 @@ export class MenuScene extends Phaser.Scene {
       .text(
         400,
         420,
-        "Arrow keys or WASD to move.\nAvoid falling blocks and don't get trapped.",
+        isTouch
+          ? "Hold the bottom corners to move, tap the top to jump.\nAvoid falling blocks and don't get trapped."
+          : "Arrow keys or WASD to move.\nAvoid falling blocks and don't get trapped.",
         textStyle(24, { color: '#20455e', align: 'center' }),
       )
       .setOrigin(0.5);

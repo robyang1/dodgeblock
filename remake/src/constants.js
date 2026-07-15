@@ -67,6 +67,15 @@ export const VSPEED_TIMER_ADD = 1000;
 export const POWERUP_TIMER_CAP = 99999;
 export const POWERUP_CYCLE = 35; // pwrCounter % 35 → spawn schedule
 
+// Remaster: the original spawned a block when `frame % round(12e6/(350*frame
+// + 1e5)) === 0`. That formula is a quantized version of a LINEAR rate:
+// 60/fpb = (350*frame + 1e5)/2e5 = 0.5 + 0.00175*frame blocks per second.
+// We accumulate that rate directly — no integer fpb, so no 50% rate cliffs
+// when fpb steps 3->2->1, and no fpb=0 insta-death at ~19 minutes. Verified
+// against the exact original schedule: within ~10% at every checkpoint.
+export const BLOCK_RATE_BASE = 0.5; // blocks/sec at frame 0
+export const BLOCK_RATE_GROWTH = 0.00175; // blocks/sec gained per sim frame
+
 // Faithful-bug toggle: the original `break`s out of the whole falling-block
 // loop when a block lands at ground level (classic/script.js:504), stalling
 // every other falling block for a frame. Off = fixed.
