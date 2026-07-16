@@ -42,7 +42,7 @@ import {
   bakeDigitFont,
   DIGIT_FONT,
 } from '../utils.js';
-import { createInput } from '../input.js';
+import { createInput, isMobile } from '../input.js';
 import { Player } from '../player.js';
 import {
   BlockManager,
@@ -191,8 +191,9 @@ export class GameScene extends Phaser.Scene {
         .setVisible(false);
     }
 
-    // touch-control hints, created last so the zone flash sits above the HUD
-    if (this.inp.touch) new TouchHints(this, this.inp.touch);
+    // touch-control hints, created last so the zone flash sits above the HUD;
+    // mobile only — touchscreen laptops keep the clean desktop look
+    if (this.inp.touch && isMobile(this)) new TouchHints(this, this.inp.touch);
   }
 
   update(time, delta) {

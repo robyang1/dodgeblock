@@ -8,6 +8,7 @@ import { setupCamera, textStyle } from '../utils.js';
 import { drawSkyGradient, drawCloud } from '../fx.js';
 import { drawBlock } from '../blocks.js';
 import { sfx } from '../audio.js';
+import { isMobile } from '../input.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -41,7 +42,7 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setShadow(0, 5, 'rgba(0,0,0,0.25)', 6);
 
-    const isTouch = this.sys.game.device.input.touch;
+    const isTouch = isMobile(this);
     const start = this.add
       .text(400, 270, isTouch ? 'Tap to start' : 'Click to start', textStyle(34, {
         color: '#ffffff',

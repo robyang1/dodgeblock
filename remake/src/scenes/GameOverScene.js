@@ -7,6 +7,7 @@ import {
 import { setupCamera, textStyle } from '../utils.js';
 import { drawSkyGradient } from '../fx.js';
 import { sfx } from '../audio.js';
+import { isMobile } from '../input.js';
 
 export class GameOverScene extends Phaser.Scene {
   constructor() {
@@ -55,7 +56,7 @@ export class GameOverScene extends Phaser.Scene {
     stat(440, 250, 'Blocks per second', s.blockRate.toFixed(1), 245);
     stat(440, 285, 'Canvas size', Math.round(display.width) + '×' + Math.round(display.height), 245);
 
-    const isTouch = this.sys.game.device.input.touch;
+    const isTouch = isMobile(this);
     const again = this.add
       .text(400, 445, isTouch ? 'Tap to play again' : 'Click or press R to play again', textStyle(26, {
         color: '#ffffff',

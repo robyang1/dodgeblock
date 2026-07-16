@@ -1,3 +1,15 @@
+// True on phones/tablets only: touch-capable AND the primary pointer is
+// coarse. Touchscreen laptops fail the second check (their primary pointer
+// is the mouse/trackpad), so they keep the normal desktop presentation —
+// the touch layer still works there, it's just not advertised.
+export function isMobile(scene) {
+  return (
+    scene.sys.game.device.input.touch &&
+    typeof window !== 'undefined' &&
+    window.matchMedia('(pointer: coarse)').matches
+  );
+}
+
 // Held-key state for arrows + WASD, mirroring the original's keys[] array,
 // plus a touch layer on touch-capable devices (see createTouch below).
 export function createInput(scene) {

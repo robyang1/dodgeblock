@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DodgeBlock</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='2' width='28' height='28' rx='6' fill='%23e8433f' stroke='%23a32b28' stroke-width='2'/><circle cx='11' cy='13' r='3.5' fill='white'/><circle cx='21' cy='13' r='3.5' fill='white'/><circle cx='11.8' cy='13.5' r='1.7' fill='%231c1c1c'/><circle cx='21.8' cy='13.5' r='1.7' fill='%231c1c1c'/><rect x='11' y='21' width='10' height='4.5' rx='2' fill='%235c1f1d'/></svg>">
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: 'Trebuchet MS', Verdana, Arial, sans-serif;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(#6ec0f2, #d8f0ff 78%, #d8f0ff);
+      position: relative;
+    }
+
+    /* clouds */
+    .cloud {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 50%;
+      filter: blur(1px);
+      animation: drift linear infinite;
+    }
+    .cloud::before, .cloud::after {
+      content: '';
+      position: absolute;
+      background: inherit;
+      border-radius: 50%;
+    }
+    .cloud::before { width: 60%; height: 80%; left: -30%; top: 22%; }
+    .cloud::after  { width: 66%; height: 86%; right: -32%; top: 18%; }
+    .c1 { width: 130px; height: 44px; top: 12%; animation-duration: 68s; }
+    .c2 { width: 90px;  height: 32px; top: 30%; animation-duration: 95s;  animation-delay: -40s; opacity: .8; }
+    .c3 { width: 70px;  height: 26px; top: 6%;  animation-duration: 120s; animation-delay: -80s; opacity: .6; }
+    @keyframes drift {
+      from { left: -180px; }
+      to   { left: 110%; }
+    }
+
+    /* ground */
+    .ground {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 88px;
+      background: linear-gradient(#7a5230, #5a3b20);
+    }
+    .ground::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 100%;
+      height: 14px;
+      background: #5db33f;
+      box-shadow: 0 3px 0 #468a2e;
+    }
+
+    /* the little guy */
+    .player {
+      position: absolute;
+      bottom: 88px;
+      left: 12%;
+      width: 56px;
+      height: 56px;
+      background: #e8433f;
+      border: 3px solid #a32b28;
+      border-radius: 10px;
+      animation: hop 2.6s ease-in-out infinite;
+    }
+    .player .eye {
+      position: absolute;
+      top: 16px;
+      width: 13px;
+      height: 13px;
+      background: #fff;
+      border-radius: 50%;
+    }
+    .player .eye::after {
+      content: '';
+      position: absolute;
+      top: 3.5px;
+      left: 3.5px;
+      width: 6px;
+      height: 6px;
+      background: #1c1c1c;
+      border-radius: 50%;
+    }
+    .player .eye.l { left: 9px; }
+    .player .eye.r { right: 9px; }
+    .player .mouth {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 16px;
+      height: 8px;
+      background: #5c1f1d;
+      border-radius: 4px;
+    }
+    @keyframes hop {
+      0%, 55%, 100% { transform: translateY(0) scale(1, 1); }
+      60% { transform: translateY(2px) scale(1.08, 0.9); }
+      72% { transform: translateY(-26px) scale(0.94, 1.08); }
+      86% { transform: translateY(0) scale(1.06, 0.92); }
+    }
+
+    /* a falling block, far side */
+    .block {
+      position: absolute;
+      right: 14%;
+      width: 78px;
+      height: 52px;
+      background: linear-gradient(#f2cf96 18%, #d9a066 30%, #d9a066 78%, #b07c46);
+      border: 3px solid #6e4a2a;
+      border-radius: 8px;
+      animation: fall 7s linear infinite;
+    }
+    @keyframes fall {
+      from { top: -14%; }
+      to   { top: 110%; }
+    }
+
+    main {
+      position: relative;
+      text-align: center;
+      padding: 0 24px;
+      z-index: 1;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(3rem, 10vw, 5.5rem);
+      font-weight: bold;
+      color: #fff;
+      -webkit-text-stroke: 2px #2b6ca3;
+      text-shadow: 0 5px 0 rgba(43, 108, 163, 0.45), 0 8px 18px rgba(0, 0, 0, 0.18);
+      letter-spacing: 1px;
+    }
+    p.tag {
+      margin: 0 0 40px;
+      font-size: clamp(1rem, 2.6vw, 1.25rem);
+      color: #20455e;
+    }
+    nav {
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    a.btn {
+      display: inline-block;
+      padding: 16px 40px;
+      border-radius: 14px;
+      font-size: 1.3rem;
+      font-weight: bold;
+      text-decoration: none;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    a.btn:hover { transform: translateY(-3px); }
+    a.btn:active { transform: translateY(0); }
+    a.play {
+      background: #e8433f;
+      color: #fff;
+      border: 3px solid #a32b28;
+      box-shadow: 0 6px 0 #a32b28, 0 10px 20px rgba(0, 0, 0, 0.15);
+    }
+    a.play:hover { box-shadow: 0 9px 0 #a32b28, 0 14px 24px rgba(0, 0, 0, 0.18); }
+    a.classic {
+      background: rgba(255, 255, 255, 0.75);
+      color: #20455e;
+      border: 3px solid rgba(43, 108, 163, 0.45);
+      box-shadow: 0 6px 0 rgba(43, 108, 163, 0.35);
+    }
+    a.classic:hover { box-shadow: 0 9px 0 rgba(43, 108, 163, 0.35); }
+
+    footer {
+      position: absolute;
+      bottom: 26px;
+      width: 100%;
+      text-align: center;
+      color: #f4e9d4;
+      font-size: 0.9rem;
+      z-index: 1;
+    }
+    footer a { color: #f4e9d4; }
+  </style>
+</head>
+<body>
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
+  <div class="cloud c3"></div>
+  <div class="block"></div>
+  <div class="ground"></div>
+  <div class="player">
+    <div class="eye l"></div>
+    <div class="eye r"></div>
+    <div class="mouth"></div>
+  </div>
+
+  <main>
+    <h1>DodgeBlock</h1>
+    <p class="tag">Dodge the falling blocks. Climb the stack. Don't get squished.</p>
+    <nav>
+      <a class="btn play" href="remake/">&#9654;&nbsp; Play</a>
+      <a class="btn classic" href="classic/">Classic (2018)</a>
+    </nav>
+  </main>
+
+  <footer>
+    Made in 8th grade &middot; remastered 2026 &middot;
+    <a href="https://github.com/robyang1/dodgeblock">source</a>
+  </footer>
+</body>
+</html>
