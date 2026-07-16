@@ -24,10 +24,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: remake/package-lock.json
+          cache-dependency-path: |
+            remake/package-lock.json
+            remix/package-lock.json
 
       - name: Build remake
         working-directory: remake
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build remix
+        working-directory: remix
         run: |
           npm ci
           npm run build
@@ -38,6 +46,7 @@ jobs:
           cp index.html license.txt _site/
           cp -r classic _site/classic
           cp -r remake/dist _site/remake
+          cp -r remix/dist _site/remix
 
       - uses: actions/configure-pages@v5
 
