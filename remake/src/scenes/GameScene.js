@@ -291,6 +291,9 @@ export class GameScene extends Phaser.Scene {
       p.y = GROUND.y - p.h;
       p.yVel = 0;
       p.offGround = 0;
+      // genuine bug in the original: only block landings reset jumps, so the
+      // double jump stopped working after one use if you landed on the ground
+      p.jumps = 0;
     }
     // pass C: same as A but lands with an extra -0.1 offset (the original's
     // second landing snap at classic/script.js:579)
